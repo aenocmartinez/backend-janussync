@@ -1,0 +1,19 @@
+services:
+  backend:
+    build: .
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-janussync}
+      DB_USER: ${DB_USER:?Configura DB_USER en .env}
+      DB_PASSWORD: ${DB_PASSWORD:?Configura DB_PASSWORD en .env}
+      DB_SSL_MODE: ${DB_SSL_MODE:-DISABLED}
+      JANUS_LOCAL_USER: ${JANUS_LOCAL_USER:?Configura JANUS_LOCAL_USER en .env}
+      JANUS_LOCAL_PASSWORD: ${JANUS_LOCAL_PASSWORD:?Configura JANUS_LOCAL_PASSWORD en .env}
+      TZ: America/Bogota
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    init: true

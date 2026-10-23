@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: backend-janussync
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:janussync}?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&sslMode=${DB_SSL_MODE:PREFERRED}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 5
+      connection-timeout: 10000
+  flyway:
+    enabled: true
+    validate-on-migrate: true
+    clean-disabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+server:
+  port: 8080
+  error:
+    include-message: never
+    include-stacktrace: never
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
