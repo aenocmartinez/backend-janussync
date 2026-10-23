@@ -22,3 +22,12 @@
 - Verificar `./mvnw verify`; con Docker, `./mvnw -Pmysql-it verify` comprueba
   migraciones y repositorios en MySQL real. No sustituirlo por H2 y afirmar que
   MySQL está validado. Probar cambios significativos, sin repetir checks sin razón.
+
+- Autenticación del producto: perfil `jwt` (Compose local,jwt), RS256 validado por
+  Spring Security Resource Server. Claves PEM externas y persistentes; no generar
+  al arrancar. Access solo Bearer, sin datos personales ni permisos en claims.
+- Refresh opaco en cookie HttpOnly; hash y sesión en MySQL, rotación transaccional
+  y revocación ante reutilización. Verificar sesión, usuario y permisos actuales
+  en cada petición. Nunca HttpSession ni tokens en logs. CSRF sigue habilitado.
+- Excepciones HTTP/CAPTCHA solo en local. Sin proveedor CAPTCHA, producción falla
+  cerrado. Inicialización del administrador solo mediante consola interactiva.

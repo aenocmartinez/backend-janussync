@@ -3,5 +3,5 @@ spring:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:janussync}?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&sslMode=${DB_SSL_MODE:DISABLED}&allowPublicKeyRetrieval=true
 janussync:
   local:
-    usuario: ${JANUS_LOCAL_USER}
-    contrasena: ${JANUS_LOCAL_PASSWORD}
+    usuario: ${JANUS_LOCAL_USER:}
+    contrasena: ${JANUS_LOCAL_PASSWORD:}

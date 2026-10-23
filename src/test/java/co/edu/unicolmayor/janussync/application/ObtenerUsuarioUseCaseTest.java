@@ -11,7 +11,8 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ObtenerUsuarioUseCaseTest {
-    @Test void distingueAusenciaDeUsuarioDeUnFalloDelRepositorio() {
+    @Test
+    void distingueAusenciaDeUsuarioDeUnFalloDelRepositorio() {
         var repositorio = mock(UsuarioRepository.class);
         var id = new UsuarioId(UUID.randomUUID());
         var caso = new ObtenerUsuarioUseCase(repositorio);

@@ -1,0 +1,10 @@
+janussync:
+  auth:
+    emisor: ${JANUS_JWT_ISSUER:janussync}
+    audiencia: ${JANUS_JWT_AUDIENCE:janussync-api}
+    clave-privada: ${JANUS_JWT_PRIVATE_KEY}
+    clave-publica: ${JANUS_JWT_PUBLIC_KEY}
+    acceso: ${JANUS_ACCESS_TTL:PT5M}
+    refresh: ${JANUS_REFRESH_TTL:P7D}
+    cookie-segura: ${JANUS_COOKIE_SECURE:true}
+    permitir-sin-captcha-local: ${JANUS_ALLOW_NO_CAPTCHA_LOCAL:false}

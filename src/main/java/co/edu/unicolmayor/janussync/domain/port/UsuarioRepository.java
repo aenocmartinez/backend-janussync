@@ -6,5 +6,6 @@ import java.util.Optional;
 
 public interface UsuarioRepository {
     Pagina<Usuario> buscar(ConsultaUsuarios consulta);
+
     Optional<Usuario> obtener(UsuarioId id);
 }

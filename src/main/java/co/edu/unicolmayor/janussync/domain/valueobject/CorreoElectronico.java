@@ -5,7 +5,10 @@ import java.net.IDN;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
-/** Correo normalizado para JanusSync. No comprueba existencia, dominio institucional ni unicidad. */
+/**
+ * Correo normalizado para JanusSync. No comprueba existencia, dominio
+ * institucional ni unicidad.
+ */
 public record CorreoElectronico(String valor) {
     private static final Pattern PARTE_LOCAL = Pattern.compile(
             "[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*");
@@ -13,10 +16,12 @@ public record CorreoElectronico(String valor) {
             "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+");
 
     public CorreoElectronico {
-        if (valor == null) throw invalido();
+        if (valor == null)
+            throw invalido();
         valor = valor.strip().toLowerCase(Locale.ROOT);
         int separador = valor.indexOf('@');
-        if (separador <= 0 || separador != valor.lastIndexOf('@')) throw invalido();
+        if (separador <= 0 || separador != valor.lastIndexOf('@'))
+            throw invalido();
         String local = valor.substring(0, separador);
         String dominio;
         try {

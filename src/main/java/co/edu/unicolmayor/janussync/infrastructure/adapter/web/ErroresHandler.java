@@ -12,6 +12,31 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 public class ErroresHandler {
     private static final Logger LOG = LoggerFactory.getLogger(ErroresHandler.class);
 
+    @ExceptionHandler(ReglaRolException.class)
+    ProblemDetail reglaRol(ReglaRolException error) {
+        var estado = switch (error.codigo()) {
+            case "FORBIDDEN" -> HttpStatus.FORBIDDEN;
+            case "NOT_FOUND" -> HttpStatus.NOT_FOUND;
+            case "DUPLICATE_NAME", "DUPLICATE_EMAIL", "ADMIN_REQUIRED", "CONFLICT", "LINK_INVALID", "LINK_EXPIRED", "LINK_USED" -> HttpStatus.CONFLICT;
+            default -> HttpStatus.BAD_REQUEST;
+        };
+        var problema = ProblemDetail.forStatusAndDetail(estado, error.getMessage());
+        problema.setProperty("code", error.codigo());
+        if (error.campo() != null)
+            problema.setProperty("fieldErrors", java.util.Map.of(error.campo(), error.getMessage()));
+        return problema;
+    }
+
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    ProblemDetail cuerpoInvalido() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "El cuerpo de la petición no es válido.");
+    }
+
+    @ExceptionHandler(AccesoRechazadoException.class)
+    ProblemDetail accesoRechazado() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, "No fue posible validar el acceso.");
+    }
+
     @ExceptionHandler(DatoInvalidoException.class)
     ProblemDetail datoInvalido(DatoInvalidoException error) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, error.getMessage());
@@ -19,7 +44,8 @@ public class ErroresHandler {
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     ProblemDetail parametroInvalido() {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Uno de los parámetros no tiene el formato esperado.");
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
+                "Uno de los parámetros no tiene el formato esperado.");
     }
 
     @ExceptionHandler(UsuarioNoEncontradoException.class)
@@ -30,6 +56,7 @@ public class ErroresHandler {
     @ExceptionHandler(DataAccessException.class)
     ProblemDetail persistencia(DataAccessException error) {
         LOG.error("Fallo al consultar la base propia: {}", error.getClass().getSimpleName());
-        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, "No fue posible consultar la información. Intenta nuevamente más tarde.");
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "No fue posible consultar la información. Intenta nuevamente más tarde.");
     }
 }

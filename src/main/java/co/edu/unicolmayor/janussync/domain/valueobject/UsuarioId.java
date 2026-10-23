@@ -5,13 +5,15 @@ import java.util.UUID;
 
 public record UsuarioId(UUID valor) {
     public UsuarioId {
-        if (valor == null) throw invalido();
+        if (valor == null)
+            throw invalido();
     }
 
     public static UsuarioId desde(String texto) {
         try {
             UUID uuid = UUID.fromString(texto);
-            if (!uuid.toString().equalsIgnoreCase(texto)) throw invalido();
+            if (!uuid.toString().equalsIgnoreCase(texto))
+                throw invalido();
             return new UsuarioId(uuid);
         } catch (IllegalArgumentException | NullPointerException error) {
             throw invalido();

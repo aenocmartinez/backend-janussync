@@ -29,6 +29,7 @@ class ConsultasHttpTest {
     @MockitoBean ListarUsuariosUseCase listar;
     @MockitoBean ObtenerUsuarioUseCase obtener;
     @MockitoBean ListarRolesUseCase roles;
+    @MockitoBean GestionarRolesUseCase gestionar;
 
     @Test void requiereAutenticacion() throws Exception {
         mvc.perform(get("/api/v1/usuarios")).andExpect(status().isUnauthorized());
@@ -87,4 +88,11 @@ class ConsultasHttpTest {
         mvc.perform(get("/api/v1/roles").with(user("lector").authorities(() -> "ROLES_CONSULTAR")))
                 .andExpect(status().isOk());
     }
+    @Test void falloDeRolesNoSeConvierteEnCatalogoVacio() throws Exception {
+        when(roles.ejecutar()).thenThrow(new DataAccessResourceFailureException("detalle interno"));
+        mvc.perform(get("/api/v1/roles").with(user("lector").authorities(() -> "ROLES_CONSULTAR")))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("detalle interno"))));
+    }
+
 }

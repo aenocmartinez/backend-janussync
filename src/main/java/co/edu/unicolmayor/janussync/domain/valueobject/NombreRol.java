@@ -4,13 +4,16 @@ import co.edu.unicolmayor.janussync.domain.exception.DatoInvalidoException;
 
 public record NombreRol(String valor) {
     public NombreRol {
-        if (valor == null) throw invalido();
-        valor = valor.strip();
+        if (valor == null)
+            throw invalido();
+        valor = valor.replaceAll("[\\p{Z}\\s]+", " ").strip();
         if (valor.isBlank() || valor.codePointCount(0, valor.length()) > 80
-                || valor.codePoints().anyMatch(Character::isISOControl)) throw invalido();
+                || valor.codePoints().anyMatch(Character::isISOControl))
+            throw invalido();
     }
 
     private static DatoInvalidoException invalido() {
-        return new DatoInvalidoException("El nombre del rol debe tener entre 1 y 80 caracteres, sin caracteres de control.");
+        return new DatoInvalidoException(
+                "El nombre del rol debe tener entre 1 y 80 caracteres, sin caracteres de control.");
     }
 }

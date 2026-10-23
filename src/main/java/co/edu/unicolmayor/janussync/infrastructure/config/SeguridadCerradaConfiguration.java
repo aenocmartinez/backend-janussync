@@ -10,7 +10,8 @@ import org.springframework.security.web.SecurityFilterChain;
 
 /** Sin autenticación institucional implementada, ningún endpoint administrativo queda público. */
 @Configuration(proxyBeanMethods = false)
-@Profile("!local")
+@org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
+@Profile("!local & !jwt")
 @EnableWebSecurity
 public class SeguridadCerradaConfiguration {
     @Bean

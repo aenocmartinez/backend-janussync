@@ -21,7 +21,8 @@ public class UsuarioController {
     public PaginaDTO<UsuarioDTO> listar(@RequestParam(defaultValue = "") String busqueda,
             @RequestParam(required = false) EstadoRegistro estado, @RequestParam(required = false) String rol,
             @RequestParam(defaultValue = "1") int pagina, @RequestParam(defaultValue = "10") int tamano) {
-        return PaginaDTO.desde(listar.ejecutar(new ConsultaUsuarios(busqueda, estado, rol, pagina, tamano)), UsuarioDTO::desde);
+        return PaginaDTO.desde(listar.ejecutar(new ConsultaUsuarios(busqueda, estado, rol, pagina, tamano)),
+                UsuarioDTO::desde);
     }
 
     @GetMapping("/{id}")

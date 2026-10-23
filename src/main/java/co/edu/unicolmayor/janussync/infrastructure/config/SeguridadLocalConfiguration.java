@@ -15,7 +15,8 @@ import org.springframework.security.web.SecurityFilterChain;
 
 /** Acceso técnico provisional para probar consultas locales. No es el login del producto. */
 @Configuration(proxyBeanMethods = false)
-@Profile("local")
+@org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication
+@Profile("local & !jwt")
 @EnableWebSecurity
 public class SeguridadLocalConfiguration {
     @Bean
