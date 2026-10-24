@@ -8,6 +8,7 @@ public interface GestionRolesRepository {
     <T> T enTransaccion(Supplier<T> trabajo);
 
     Map<String, Set<String>> permisosDeUsuariosActivos();
+
     Set<String> usuariosConCredenciales();
 
     Set<String> catalogoPermisos();

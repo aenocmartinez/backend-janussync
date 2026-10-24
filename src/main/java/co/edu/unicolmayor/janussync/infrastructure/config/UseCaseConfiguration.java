@@ -12,7 +12,7 @@ public class UseCaseConfiguration {
     @Bean co.edu.unicolmayor.janussync.application.usecase.GestionarRolesUseCase gestionarRoles(co.edu.unicolmayor.janussync.domain.port.GestionRolesRepository gestion,RolRepository roles,AuditoriaPort audit) { return new co.edu.unicolmayor.janussync.application.usecase.GestionarRolesUseCase(gestion,roles,audit); }
     @Bean ListarRolesUseCase listarRoles(RolRepository roles) { return new ListarRolesUseCase(roles); }
 
-    @Bean @org.springframework.context.annotation.Profile("jwt") GestionarUsuariosUseCase gestionarUsuarios(GestionUsuariosRepository g,UsuarioRepository u,GestionRolesRepository a,RolRepository r,AuditoriaPort audit,java.time.Clock reloj){return new GestionarUsuariosUseCase(g,u,a,r,audit,reloj);}
+    @Bean @org.springframework.context.annotation.Profile("jwt") GestionarUsuariosUseCase gestionarUsuarios(GestionUsuariosRepository g,UsuarioRepository u,GestionRolesRepository a,RolRepository r,AuditoriaPort audit,java.time.Clock reloj,CatalogoProgramasRepository programas,java.time.Duration vigenciaCatalogoProgramas){return new GestionarUsuariosUseCase(g,u,a,r,audit,reloj,programas,vigenciaCatalogoProgramas);}
     @Bean @org.springframework.context.annotation.Profile("jwt") ContrasenasUseCase contrasenas(GestionUsuariosRepository g,GestionarUsuariosUseCase u,AccesoRepository a,ProtectorCredenciales p,CorreoPort c,AuditoriaPort audit,java.time.Clock reloj,org.springframework.core.env.Environment e){
         String url=e.getProperty("janussync.correo.url-publica","http://localhost:3000");
         java.net.URI uri=java.net.URI.create(url);

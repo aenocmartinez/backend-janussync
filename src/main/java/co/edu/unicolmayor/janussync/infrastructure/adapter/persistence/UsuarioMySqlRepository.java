@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Repository
 @Transactional(readOnly = true)
 public class UsuarioMySqlRepository implements UsuarioRepository {
-    private static final String COLUMNAS = "u.id, u.nombres, u.apellidos, u.correo, u.cargo, u.estado, u.creado_en, u.actualizado_en, (SELECT c.actualizado_en FROM credenciales c WHERE c.usuario_id=u.id) AS contrasena_en, e.proposito AS correo_proposito,e.estado AS correo_estado,e.solicitado_en AS correo_en,e.vence_en AS correo_vence,(SELECT CONCAT(a.nombres,' ',a.apellidos) FROM usuarios a WHERE a.id=e.solicitado_por) AS correo_actor,ep.invalidado_en AS enlace_invalidado,ep.utilizado_en AS enlace_utilizado";
+    private static final String COLUMNAS = "u.id, u.nombres, u.apellidos, u.correo, u.cargo, u.estado, u.creado_en, u.actualizado_en, u.version_asignacion, (SELECT c.actualizado_en FROM credenciales c WHERE c.usuario_id=u.id) AS contrasena_en, e.proposito AS correo_proposito,e.estado AS correo_estado,e.solicitado_en AS correo_en,e.vence_en AS correo_vence,(SELECT CONCAT(a.nombres,' ',a.apellidos) FROM usuarios a WHERE a.id=e.solicitado_por) AS correo_actor,ep.invalidado_en AS enlace_invalidado,ep.utilizado_en AS enlace_utilizado";
     private static final String ENVIO=" LEFT JOIN envios_acceso e ON e.id=(SELECT ultimo.id FROM envios_acceso ultimo WHERE ultimo.usuario_id=u.id AND ultimo.correo=u.correo ORDER BY ultimo.solicitado_en DESC,ultimo.id DESC LIMIT 1) LEFT JOIN enlaces_contrasena ep ON ep.id=e.enlace_id ";
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -64,8 +64,12 @@ public class UsuarioMySqlRepository implements UsuarioRepository {
                 (org.springframework.jdbc.core.RowCallbackHandler) fila -> roles
                         .computeIfAbsent(fila.getString("usuario_id"), clave -> new HashSet<>())
                         .add(fila.getString("rol_id")));
+        Map<String, Set<String>> programas = new HashMap<>();
+        jdbc.query("SELECT usuario_id,programa_id FROM usuarios_programas WHERE usuario_id IN (:ids)",
+                Map.of("ids", usuarios.stream().map(u -> u.id().valor().toString()).toList()),
+                (org.springframework.jdbc.core.RowCallbackHandler) fila -> programas.computeIfAbsent(fila.getString("usuario_id"), clave -> new HashSet<>()).add(fila.getString("programa_id")));
         return usuarios.stream().map(u -> new Usuario(u.id(), u.nombres(), u.apellidos(), u.correo(), u.cargo(),
-                u.estado(), roles.getOrDefault(u.id().valor().toString(), Set.of()), u.creadoEn(), u.actualizadoEn(),u.contrasenaActualizada(),u.ultimoCorreo()))
+                u.estado(), roles.getOrDefault(u.id().valor().toString(), Set.of()), u.creadoEn(), u.actualizadoEn(),u.contrasenaActualizada(),u.ultimoCorreo(),programas.getOrDefault(u.id().valor().toString(),Set.of()),u.versionAsignacion()))
                 .toList();
     }
 
@@ -75,7 +79,7 @@ public class UsuarioMySqlRepository implements UsuarioRepository {
                 fila.getString("cargo"), EstadoRegistro.valueOf(fila.getString("estado")), Set.of(),
                 fila.getTimestamp("creado_en").toInstant(), fila.getTimestamp("actualizado_en").toInstant(),
                 fila.getTimestamp("contrasena_en")==null?null:fila.getTimestamp("contrasena_en").toInstant(),
-                fila.getString("correo_proposito")==null?null:new CorreoAcceso(fila.getString("correo_proposito"),fila.getString("correo_estado"),fila.getTimestamp("correo_en").toInstant(),fila.getTimestamp("correo_vence").toInstant(),fila.getString("correo_actor"),fila.getTimestamp("enlace_invalidado")==null?null:fila.getTimestamp("enlace_invalidado").toInstant(),fila.getTimestamp("enlace_utilizado")==null?null:fila.getTimestamp("enlace_utilizado").toInstant()));
+                fila.getString("correo_proposito")==null?null:new CorreoAcceso(fila.getString("correo_proposito"),fila.getString("correo_estado"),fila.getTimestamp("correo_en").toInstant(),fila.getTimestamp("correo_vence").toInstant(),fila.getString("correo_actor"),fila.getTimestamp("enlace_invalidado")==null?null:fila.getTimestamp("enlace_invalidado").toInstant(),fila.getTimestamp("enlace_utilizado")==null?null:fila.getTimestamp("enlace_utilizado").toInstant()),Set.of(),fila.getLong("version_asignacion"));
     }
 
     private String escaparBusqueda(String valor) {

@@ -115,7 +115,7 @@ class RolesMySqlIT {
         assertThat(roles.listar()).hasSize(4);
         assertThat(rol("ADMINISTRADOR").totalUsuarios()).isEqualTo(2);
         assertThat(rol("ADMINISTRADOR").usuariosActivos()).isEqualTo(1);
-        assertThat(rol("ADMINISTRADOR").permisos()).hasSize(15);
+        assertThat(rol("ADMINISTRADOR").permisos()).hasSize(16);
         assertThat(rol("COORDINADOR").totalUsuarios()).isEqualTo(2);
         assertThat(rol("COLABORADOR").totalUsuarios()).isEqualTo(1);
         assertThat(rol("OPERADOR_EV").totalUsuarios()).isZero();
@@ -156,7 +156,7 @@ class RolesMySqlIT {
         var admin = datos.stream().filter(r -> r.get("id").equals("ADMINISTRADOR")).findFirst().orElseThrow();
         assertThat(admin.get("totalUsuarios")).isEqualTo(2);
         assertThat(admin.get("usuariosActivos")).isEqualTo(1);
-        assertThat((List<?>) admin.get("permisos")).hasSize(15);
+        assertThat((List<?>) admin.get("permisos")).hasSize(16);
         assertThat(admin.get("creadoEn").toString()).endsWith("Z");
         jdbc.update("DELETE FROM roles_permisos WHERE rol_id='ADMINISTRADOR' AND permiso_codigo='ROLES_CONSULTAR'");
         mvc.perform(get("/api/v1/roles").header("Authorization", "Bearer " + jwt)).andExpect(status().isForbidden());
@@ -198,7 +198,7 @@ class RolesMySqlIT {
         assertThatThrownBy(() -> gestionar.editar(actor(), "ADMINISTRADOR", "Cambio que debe revertirse", null,
                 Set.of("PERFIL_CONSULTAR"))).hasMessageContaining("conservar");
         assertThat(rol("ADMINISTRADOR").nombre().valor()).isEqualTo("Administrador");
-        assertThat(rol("ADMINISTRADOR").permisos()).hasSize(15);
+        assertThat(rol("ADMINISTRADOR").permisos()).hasSize(16);
     }
 
     @Test

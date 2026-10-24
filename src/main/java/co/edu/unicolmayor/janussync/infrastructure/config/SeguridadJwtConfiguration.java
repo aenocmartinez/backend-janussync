@@ -27,7 +27,21 @@ public class SeguridadJwtConfiguration {
         csrf.setCookieCustomizer(c->c.httpOnly(true).secure(p.cookieSegura()).sameSite("Strict"));
         return http.sessionManagement(s->s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .requestCache(c->c.disable()).formLogin(c->c.disable()).httpBasic(c->c.disable()).logout(c->c.disable())
-            .csrf(c->c.csrfTokenRepository(csrf).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
+            // Validar la acción contextual con el filtro estándar antes de autenticar Bearer:
+            // la estrategia de autenticación puede renovar el token CSRF de la petición.
+            .csrf(c->c.csrfTokenRepository(csrf).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                .withObjectPostProcessor(new org.springframework.security.config.ObjectPostProcessor<CsrfFilter>() {
+                    public <O extends CsrfFilter> O postProcess(O filtro) {
+                        var bearer=new org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver();
+                        filtro.setRequireCsrfProtectionMatcher(req->{
+                            if(!CsrfFilter.DEFAULT_CSRF_MATCHER.matches(req))return false;
+                            if(req.getRequestURI().equals(req.getContextPath()+"/api/v1/programas/actualizacion"))return true;
+                            try {return bearer.resolve(req)==null;}
+                            catch(OAuth2AuthenticationException e){return true;}
+                        });
+                        return filtro;
+                    }
+                }))
             .authorizeHttpRequests(r->r
                 .requestMatchers(HttpMethod.GET,"/actuator/health","/api/v1/auth/csrf").permitAll()
                 .requestMatchers(HttpMethod.POST,"/api/v1/auth/login","/api/v1/auth/refresh","/api/v1/auth/logout").permitAll()
@@ -46,6 +60,11 @@ public class SeguridadJwtConfiguration {
                 .requestMatchers(HttpMethod.PUT,"/api/v1/usuarios/*/estado").hasAuthority("USUARIOS_ESTADO")
                 .requestMatchers(HttpMethod.POST,"/api/v1/usuarios/*/invitacion","/api/v1/usuarios/*/restablecimiento").hasAuthority("USUARIOS_ACCESO")
                 .requestMatchers(HttpMethod.GET,"/api/v1/auditoria","/api/v1/auditoria/*").hasAuthority("HISTORIAL_CONSULTAR")
+                .requestMatchers(HttpMethod.GET,"/api/v1/integraciones").hasAuthority("INTEGRACIONES_CONSULTAR")
+                .requestMatchers(HttpMethod.POST,"/api/v1/integraciones/*/comprobaciones").hasAuthority("INTEGRACIONES_COMPROBAR")
+                .requestMatchers(HttpMethod.POST,"/api/v1/programas/actualizacion").hasAuthority("PROGRAMAS_ACTUALIZAR")
+                .requestMatchers(HttpMethod.GET,"/api/v1/programas","/api/v1/programas/estado").hasAuthority("ROLES_ASIGNAR")
+                .requestMatchers(HttpMethod.GET,"/api/v1/programas/resolver").hasAnyAuthority("ROLES_ASIGNAR","USUARIOS_CONSULTAR","PERFIL_CONSULTAR")
                 .anyRequest().denyAll())
             .oauth2ResourceServer(o->o.jwt(j->j.jwtAuthenticationConverter(jwt->{
                 try {

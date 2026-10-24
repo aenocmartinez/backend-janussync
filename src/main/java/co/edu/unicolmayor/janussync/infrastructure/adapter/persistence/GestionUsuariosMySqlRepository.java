@@ -27,7 +27,11 @@ public class GestionUsuariosMySqlRepository implements GestionUsuariosRepository
  jdbc.update("INSERT INTO usuarios(id,nombres,apellidos,correo,cargo,estado) VALUES(?,?,?,?,?,?)",id,d.nombres().valor(),d.apellidos().valor(),d.correo().valor(),d.cargo().valor(),e.name());asignar(id,roles);
  }
  public void editar(String id,DatosUsuario d){jdbc.update("UPDATE usuarios SET nombres=?,apellidos=?,correo=?,cargo=?,actualizado_en=CURRENT_TIMESTAMP(6) WHERE id=?",d.nombres().valor(),d.apellidos().valor(),d.correo().valor(),d.cargo().valor(),id);}
- public void asignar(String id,Set<String> roles){jdbc.update("DELETE FROM usuarios_roles WHERE usuario_id=?",id);roles.stream().sorted().forEach(r->jdbc.update("INSERT INTO usuarios_roles VALUES(?,?)",id,r));jdbc.update("UPDATE usuarios SET actualizado_en=CURRENT_TIMESTAMP(6) WHERE id=?",id);}
+ public void asignar(String id,Set<String> roles){jdbc.update("DELETE FROM usuarios_roles WHERE usuario_id=?",id);roles.stream().sorted().forEach(r->jdbc.update("INSERT INTO usuarios_roles VALUES(?,?)",id,r));jdbc.update("UPDATE usuarios SET actualizado_en=CURRENT_TIMESTAMP(6),version_asignacion=version_asignacion+1 WHERE id=?",id);}
+ public void guardarProgramas(String id,Set<String> programas){
+ jdbc.update("DELETE FROM usuarios_programas WHERE usuario_id=?",id);
+ programas.stream().sorted().forEach(p->jdbc.update("INSERT INTO usuarios_programas(usuario_id,programa_id) VALUES(?,?)",id,p));
+ }
  public void estado(String id,EstadoRegistro e){jdbc.update("UPDATE usuarios SET estado=?,actualizado_en=CURRENT_TIMESTAMP(6) WHERE id=?",e.name(),id);}
  public void revocarSesiones(String id,Instant ahora){jdbc.update("UPDATE sesiones_autenticacion SET revocada_en=COALESCE(revocada_en,?) WHERE usuario_id=?",fecha(ahora),id);}
  public void invalidarEnlaces(String id,Instant ahora){jdbc.update("UPDATE enlaces_contrasena SET invalidado_en=COALESCE(invalidado_en,?) WHERE usuario_id=? AND utilizado_en IS NULL",fecha(ahora),id);}

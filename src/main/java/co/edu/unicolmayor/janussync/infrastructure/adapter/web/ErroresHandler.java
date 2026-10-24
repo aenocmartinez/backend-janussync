@@ -17,7 +17,7 @@ public class ErroresHandler {
         var estado = switch (error.codigo()) {
             case "FORBIDDEN" -> HttpStatus.FORBIDDEN;
             case "NOT_FOUND" -> HttpStatus.NOT_FOUND;
-            case "DUPLICATE_NAME", "DUPLICATE_EMAIL", "ADMIN_REQUIRED", "CONFLICT", "LINK_INVALID", "LINK_EXPIRED", "LINK_USED" -> HttpStatus.CONFLICT;
+            case "CATALOG_UNAVAILABLE", "DUPLICATE_NAME", "DUPLICATE_EMAIL", "ADMIN_REQUIRED", "CONFLICT", "LINK_INVALID", "LINK_EXPIRED", "LINK_USED" -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
         var problema = ProblemDetail.forStatusAndDetail(estado, error.getMessage());
@@ -30,6 +30,18 @@ public class ErroresHandler {
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
     ProblemDetail cuerpoInvalido() {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "El cuerpo de la petición no es válido.");
+    }
+
+    @ExceptionHandler(ActualizacionCatalogoException.class)
+    ProblemDetail catalogo(ActualizacionCatalogoException error){
+        var p=ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,error.getMessage());
+        p.setProperty("code","CATALOG_UPDATE_FAILED");return p;
+    }
+
+    @ExceptionHandler(AcademusoftNoDisponibleException.class)
+    ProblemDetail academusoft(AcademusoftNoDisponibleException error) {
+        var p=ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,error.getMessage());
+        p.setProperty("code","ACADEMUSOFT_UNAVAILABLE");return p;
     }
 
     @ExceptionHandler(AccesoRechazadoException.class)

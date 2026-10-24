@@ -87,6 +87,7 @@ class UsuariosMySqlIT {
         jdbc.update("DELETE FROM tokens_renovacion");
         jdbc.update("DELETE FROM sesiones_autenticacion");
         jdbc.update("DELETE FROM credenciales");
+        jdbc.update("DELETE FROM usuarios_programas");
         jdbc.update("DELETE FROM usuarios_roles");
         jdbc.update("DELETE FROM usuarios");
         jdbc.update("DELETE FROM limites_autenticacion");
@@ -142,9 +143,9 @@ class UsuariosMySqlIT {
     }
     @Test void noInventaProgramasYConservaAsignacionesAcademicasAnteriores(){
       var u=crear("programas@pruebas.invalid");String id=u.id().valor().toString();
-      assertThatThrownBy(()->gestionarUsuarios.asignar(actor(),id,Set.of("COORDINADOR"),Set.of())).hasMessageContaining("Academusoft");
-      assertThatThrownBy(()->gestionarUsuarios.asignar(actor(),id,Set.of("ADMINISTRADOR"),Set.of("inventado"))).hasMessageContaining("Academusoft");
-      assertThat(gestionarUsuarios.asignar(actor(),actor(),Set.of("ADMINISTRADOR","COORDINADOR"),Set.of()).roles()).contains("COORDINADOR");
+      assertThatThrownBy(()->gestionarUsuarios.asignar(actor(),id,Set.of("COORDINADOR"),Set.of())).hasMessageContaining("al menos");
+      assertThatThrownBy(()->gestionarUsuarios.asignar(actor(),id,Set.of("ADMINISTRADOR"),Set.of("inventado"))).hasMessageContaining("catálogo");
+      assertThatThrownBy(()->gestionarUsuarios.asignar(actor(),actor(),Set.of("ADMINISTRADOR","COORDINADOR"),Set.of())).hasMessageContaining("al menos");
     }
     @Test void invitacionSmtpFueraDeTransaccionHashSoloYUsoUnico(){
       var u=crear("invitada@pruebas.invalid");String id=u.id().valor().toString();
@@ -213,7 +214,7 @@ class UsuariosMySqlIT {
     }
     @Test void permisosDeEscrituraYRetiradaConJwtEmitido() throws Exception {
       var u=crear("api@pruebas.invalid");String id=u.id().valor().toString();String jwt=ingreso(CORREO);
-      mvc.perform(put("/api/v1/usuarios/"+id+"/roles").header("Authorization","Bearer "+jwt).contentType("application/json").content("{\"roles\":[\"ADMINISTRADOR\"],\"programas\":[]}")).andExpect(status().isOk());
+      mvc.perform(put("/api/v1/usuarios/"+id+"/roles").header("Authorization","Bearer "+jwt).contentType("application/json").content("{\"roles\":[\"ADMINISTRADOR\"],\"programas\":[],\"versionAsignacion\":"+gestionarUsuarios.obtener(id).versionAsignacion()+"}")).andExpect(status().isOk());
       jdbc.update("DELETE FROM roles_permisos WHERE rol_id='ADMINISTRADOR' AND permiso_codigo IN ('USUARIOS_EDITAR','USUARIOS_ESTADO','USUARIOS_ACCESO','ROLES_ASIGNAR','HISTORIAL_CONSULTAR')");
       mvc.perform(put("/api/v1/usuarios/"+id).header("Authorization","Bearer "+jwt).contentType("application/json").content("{}")).andExpect(status().isForbidden());
       mvc.perform(put("/api/v1/usuarios/"+id+"/estado").header("Authorization","Bearer "+jwt).contentType("application/json").content("{\"estado\":\"INACTIVO\"}")).andExpect(status().isForbidden());

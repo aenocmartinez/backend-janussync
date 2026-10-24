@@ -1,3 +1,402 @@
+## Catálogo local de programas — 2026-10-24 (V9)
+
+Esta entrega sustituye las búsquedas y validaciones Oracle bajo demanda descritas
+más abajo: el formulario consulta **MySQL** y Academusoft conserva la autoridad
+sobre los datos. No existe edición manual ni CRUD del catálogo.
+
+`FuenteProgramasAcademicos` lee todos los programas en una transacción Oracle
+exclusivamente de lectura; `CatalogoProgramasRepository` consulta y publica en
+MySQL. Se conservan ID institucional como texto, código, nombre, referencias,
+actividad normalizada y estado oficial original. Una lectura completa que deja
+de incluir un ID lo marca como ausente, conservando registros y asignaciones;
+ausencia e inactividad son condiciones distintas.
+
+Antes de publicar se comprueban finalización, conteo, campos e IDs únicos.
+La lectura completa admite hasta 10 000 registros y 60 segundos totales, además
+de los límites de conexión y consulta/red existentes (5 y 10 segundos). Un
+volumen mayor requiere revisar el límite; no se publica una lista truncada.
+Lecturas vacías, incompletas, duplicadas o fallidas conservan el catálogo anterior
+y su fecha correcta. Publicación y auditoría son atómicas. El bloqueo MySQL
+nombrado coordina instancias durante la lectura **sin transacción MySQL abierta**;
+una reserva persistida identifica el intento. Publicación y asignaciones usan
+el bloqueo administrativo común para revalidar elegibilidad al guardar.
+
+Variables del backend, explícitas en Compose y `.env.example`:
+
+| Variable | Valor predeterminado | Uso |
+| --- | --- | --- |
+| `JANUS_PROGRAMAS_SYNC_ENABLED` | `true` | Habilita solo la actualización del catálogo. |
+| `JANUS_PROGRAMAS_SYNC_CRON` | `0 0 2 * * *` | Diaria a las 02:00. |
+| `JANUS_PROGRAMAS_SYNC_ZONE` | `America/Bogota` | Zona independiente del servidor. |
+| `JANUS_PROGRAMAS_MAX_AGE` | `PT48H` | Antigüedad máxima para nuevas asignaciones. |
+| `JANUS_PROGRAMAS_UPDATE_COOLDOWN` | `PT1M` | Pausa persistida entre intentos. |
+
+Spring programa el trabajo y MySQL coordina las réplicas y registra el próximo
+turno admitido. No sincroniza solicitudes, usuarios, cursos ni Brightspace.
+No consulta Oracle durante el arranque, búsquedas o guardados. Tras una caída,
+la conexión libera el bloqueo; una reserva interrumpida no impide otro intento
+admitido. La vigencia visual de una reserva es 120 segundos; el bloqueo de
+conexión sigue evitando solapamientos mientras su propietario esté vivo.
+
+Carga inicial o recuperación explícita, desde `backend-janussync`:
+
+```sh
+docker compose run --rm --no-deps --entrypoint java backend \
+  -Duser.timezone=America/Bogota -jar /app/janussync.jar \
+  --spring.main.web-application-type=none \
+  --JANUS_PROGRAMAS_SYNC_ENABLED=false --janus.actualizar-programas=true
+```
+
+Reutiliza el mismo caso de uso y coordinación; no requiere contraseña en el chat
+ni imprime configuración. Si Oracle falla, devuelve salida no exitosa y mantiene
+la última carga válida. La red/VPN institucional debe permitir la lectura.
+
+`GET /api/v1/programas/estado` informa última carga correcta, último intento,
+resultado, cantidad, ejecución y vigencia (ROLES_ASIGNAR). Las búsquedas y
+resoluciones conservan sus rutas y paginación anteriores, ahora sobre MySQL.
+`POST /api/v1/programas/actualizacion` exige **PROGRAMAS_ACTUALIZAR**, JWT y
+cookie/cabecera CSRF emitidas por Spring. V9 concede el permiso al rol inicial
+ADMINISTRADOR; los demás roles pueden recibirlo mediante la gestión existente.
+La auditoría distingue actor humano de Sistema y registra inicio y resultado.
+
+En **Usuarios → Detalle → Gestionar roles y programas**, la fecha aparece junto
+al selector y existe una única acción contextual «Actualizar programas» para
+actores autorizados. Un fallo de renovación conserva selecciones y catálogo
+utilizable. Sin carga válida o con 48 horas cumplidas no se añaden programas;
+se conservan consulta y retirada, respetando las reglas del rol. La validación
+se repite en la transacción de guardado, sin Oracle. Detalle, sesión y auditoría
+mantienen la invalidación existente. No se activa demo ni fallback.
+
+Prueba aislada del recorrido y la carga real:
+
+```sh
+python3 scripts/verificar-catalogo-programas.py
+```
+
+Usa MySQL temporal y credenciales efectivas solo en memoria, realiza únicamente
+lecturas Oracle, y después vuelve Oracle inaccesible para verificar búsqueda,
+guardado y conservación ante actualización fallida. El interruptor explícito
+`JANUS_TEST_CATALOGO_FIXTURE=true` es exclusivamente una alternativa del script
+para MySQL temporal; no acredita carga real ni modifica el modo de la aplicación.
+
+## Gestionar roles y programas con Academusoft — 2026-10-24
+
+Recorrido existente: **Usuarios → Detalle del usuario → Gestionar roles y
+programas → Guardar roles y programas**. No hay menú ni CRUD de programas.
+El formulario de creación reutiliza el mismo selector; editar datos personales
+no modifica asignaciones. «Mi cuenta» muestra el alcance actualizado.
+
+Fuente acreditada mediante lecturas acotadas en Oracle de pruebas:
+`ACADEMICO.PROGRAMA`, clave primaria institucional `PROG_ID` (NUMBER), código
+`PROG_CODIGOPROGRAMA`, nombre `PROG_NOMBRE`. El comentario oficial de
+`PROG_ESTADO` documenta `1` activo / `0` inactivo. Solo `1` es elegible para una
+nueva asignación; NULL u otro estado no se interpreta como activo.
+Las referencias de modalidad, metodología y jornada provienen de
+`ACADEMICO.MODALIDAD`, `ACADEMICO.METODOLOGIA` y `ACADEMICO.JORNADA`, unidas por
+sus identificadores presentes en PROGRAMA. El selector muestra estos datos,
+código e ID para distinguir nombres/códigos repetidos.
+
+La inspección encontró 433 registros: 424 activos, 8 inactivos y 1 sin estado;
+433 IDs diferentes, 381 códigos distintos y 421 nombres distintos. Son cifras
+de la revisión, no un catálogo incorporado al código. UNIDADPROGRAMA relaciona
+programas con unidades/localidades mediante su propio UNPR_ID; no se confunde
+ese identificador de relación con PROG_ID ni se introduce asignación por sede.
+El Laravel anterior (`/Users/abi/workspace/UCMC/janussync`) se inspeccionó solo
+como referencia. Usaba una vista de estudiantes y una estructura de cursos;
+no se ejecutó ni se obtiene el catálogo leyendo estudiantes.
+
+`ProgramaAcademicoRepository` expresa búsqueda paginada y resolución de IDs en
+el dominio. `ProgramaAcademicoOracleRepository` implementa ambas consultas con
+parámetros, `ROW_NUMBER` y orden estable por nombre/PROG_ID. Una ausencia devuelve
+lista vacía; un fallo devuelve 503/ACADEMUSOFT_UNAVAILABLE. No hay fallback ni
+adaptador HTTP vacío. MySQL sigue siendo el datasource principal de Spring y
+Flyway; la conexión Oracle independiente abre transacciones exclusivamente de
+lectura bajo demanda. No se realizan escrituras académicas.
+
+API:
+
+- `GET /api/v1/programas?busqueda=...&pagina=1&tamano=20`: solo activos,
+  búsqueda por código/nombre, hasta 50 por página; permiso ROLES_ASIGNAR.
+- `GET /api/v1/programas/resolver?ids=...`: hasta 100 IDs, incluidos inactivos,
+  para leer asignaciones existentes. Permisos ROLES_ASIGNAR, USUARIOS_CONSULTAR
+  o PERFIL_CONSULTAR. Un ID ausente no borra ninguna asignación.
+- `PUT /api/v1/usuarios/{id}/roles`: `roles`, `programas` y
+  `versionAsignacion` obligatoria. Duplicados rechazados. La respuesta de usuario
+  y `/auth/me` incluyen `programas` y `versionAsignacion`.
+
+V8 agrega `usuarios_programas` (clave única usuario/ID institucional) y
+`usuarios.version_asignacion`. Los IDs se conservan como texto, sin conversiones
+arbitrarias a UUID/número ni eliminación de ceros. No se guarda ni edita un
+catálogo paralelo en MySQL. Ante un ID no resuelto, la interfaz conserva el ID
+y muestra «Información no disponible».
+
+Las reglas de Coordinador/Colaborador siguen ligadas a los IDs estables
+COORDINADOR/COLABORADOR, también si se renombra el rol. Exigen al menos un
+programa. Los roles dinámicos mantienen las reglas existentes, sin nueva
+clasificación. Oracle valida solo los IDs nuevos; se permite conservar o retirar
+los existentes sin exigir disponibilidad actual. Si no quedan roles por programa,
+la interfaz avisa que retirará sus vinculaciones antes de guardar.
+
+Las lecturas Oracle se completan **antes** de abrir la transacción MySQL.
+Dentro del bloqueo administrativo existente se vuelve a autorizar al actor,
+se verifica la versión y se guardan roles/programas/auditoría atómicamente,
+conservando la protección del último administrador. Un conflicto devuelve 409
+sin sobrescribir cambios y mantiene las selecciones del formulario. Los cambios
+invalidan detalle/listados/auditoría/sesión; `/auth/me` lee el alcance actual,
+sin permisos ni programas obsoletos dentro del JWT.
+
+Configuración: reutiliza ACADEMUSOFT_MECANISMO y las tres variables externas
+ACADEMUSOFT_ORACLE_*; ningún secreto llega al frontend. Límites de lectura
+independientes, explícitos en Compose y `.env.example`:
+ACADEMUSOFT_PROGRAMAS_CONNECTION_TIMEOUT=PT5S y
+ACADEMUSOFT_PROGRAMAS_QUERY_TIMEOUT=PT10S (login/conexión y consulta/lectura).
+La configuración exige valores positivos, conexión ≤ ejecución ≤ 60 segundos.
+No se alteran los límites ni el adaptador de comprobación de Inicio.
+
+La configuración efectiva y el valor literal del `.env` local fueron comprobados
+y coinciden; no se modificaron credenciales ni `.env`. Atención técnica:
+`docker compose config` puede escapar los dólares al renderizar. Su salida no
+es una fuente para copiar contraseñas a conexiones de prueba. Las comprobaciones
+reales usaron el entorno efectivo del contenedor únicamente en memoria.
+
+Prueba aislada del recorrido (JAR e imágenes actualizados):
+
+```sh
+python3 scripts/verificar-programas.py
+```
+
+Crea MySQL temporal y administrador de prueba por consola; usa el adaptador real
+con lecturas Oracle de programas y el frontend HTTP real. Las pruebas de fallo,
+inactivos, manipulación, rollback y concurrencia usan un doble de Academusoft
+con MySQL real aislado. No se alteran datos de trabajo para las pruebas.
+
+## Brightspace simulado local — 2026-10-24
+
+`BRIGHTSPACE_MODE=real|mock` selecciona exclusivamente el adaptador de comprobación
+Brightspace. El valor predeterminado y el de `.env.example` es `real`; el `.env`
+local actual selecciona `mock`. Compose transmite la variable explícitamente.
+`mock` requiere el perfil `local` y se rechaza si también se activa `prod` o
+`production`; cualquier valor desconocido impide arrancar. No existe fallback.
+
+El adaptador simulado no construye el cliente HTTP, no lee credenciales y no
+contacta al proveedor. Solo devuelve el resultado determinista `SIMULADO` para
+la comprobación de Inicio; no implementa sincronización, cursos, inscripciones
+ni calificaciones. El frontend sigue utilizando JanusApi HTTP, con JWT y permisos
+actuales de MySQL; **no activar `VITE_JANUS_DEMO`**. Academusoft, administración,
+correo y autenticación conservan sus implementaciones reales.
+
+La API conserva `simulated: true|false` en estado y última comprobación. En local,
+la presentación interpreta el éxito `SIMULADO` como «Disponible» con los estilos
+habituales, sin avisos técnicos de simulación. Antes de comprobar muestra
+«Sin comprobar» y respeta la vigencia del resultado. Diagnóstico muestra
+«Comprobación completada correctamente» y «Comprobación funcional de Brightspace»,
+sin afirmar una petición real ni una respuesta del proveedor. El código visible
+es OK; el código persistido y auditado continúa siendo SIMULADO. Esta presentación
+operativa local no acredita disponibilidad real del proveedor.
+«Comprobar ahora» conserva autorización, exclusión entre peticiones, pausa
+persistente (`JANUS_CHECK_COOLDOWN`, predeterminado `PT1M`) y auditoría en MySQL;
+la descripción auditada identifica el origen. No hay comprobaciones automáticas.
+
+V7 conserva las filas reales de V6 y separa reservas, fechas y resultados mediante
+la clave `(plataforma, origen)`. El resultado real anterior no se presenta como
+vigente durante la simulación; vuelve a consultarse al seleccionar `real` y puede
+aparecer desactualizado según su fecha. Las credenciales locales se conservan,
+sin incorporarlas a Git, al frontend ni al contexto Docker.
+
+Para volver al proveedor, editar **solo el `.env` local** a `BRIGHTSPACE_MODE=real`
+y recrear el backend (las mismas imágenes admiten ambos modos):
+
+```sh
+docker compose up -d --no-build --no-deps --force-recreate backend
+```
+
+No requiere cambios en dominio, casos de uso ni frontend. La autenticación real
+Brightspace sigue pendiente de confirmación del administrador del proveedor;
+seleccionar `real` mostrará su fallo real mientras continúe el rechazo.
+
+Prueba manual: abrir `http://localhost:3000/inicio`, ingresar con la cuenta real,
+solicitar «Comprobar ahora» en Brightspace, comprobar «Disponible», abrir
+Diagnóstico y recargar. Academusoft conserva su diagnóstico real independiente.
+
+Validación aislada del recorrido (imágenes preparadas y JAR compilado):
+
+```sh
+TEST_JANUS_BRIGHTSPACE_MOCK=true \
+JANUS_TEST_BACKEND_IMAGE=janussync-brightspace-mock-backend \
+JANUS_TEST_FRONTEND_IMAGE=janussync-brightspace-operativo-frontend \
+python3 scripts/verificar-integraciones.py
+```
+
+## Investigación de Brightspace — 2026-10-23
+
+Se verificó la configuración efectiva del contenedor contra Compose: coinciden
+las seis variables Brightspace. No se modificaron `.env`, claves, mecanismo ni
+versión LP `1.49`. La URL es un origen HTTPS sin credenciales ni parámetros.
+
+La consulta autenticada `GET /d2l/api/lp/1.49/users/whoami` devolvió **HTTP 403**,
+respuesta HTML con el marcador **Invalid Token**. Se repitió desde la red del backend
+usando Java y se confirmó `AUTENTICACION_RECHAZADA`. La diferencia respecto al reloj
+indicado por el proveedor fue de 0 segundos al medirla. No se registró el cuerpo,
+la URI firmada, firmas ni credenciales.
+
+Se consultó el SDK PHP exacto del `composer.lock` de Laravel: `1.6.1`, revisión
+`8898a557496af0c3be7a8237a69afd949de42747`. `formatSignature` utiliza método en
+mayúsculas, ruta en minúsculas decodificada y timestamp Unix separados por `&`;
+`D2LSigner` aplica HMAC-SHA256 y Base64 URL sin relleno. Para WhoAmI, cuya ruta no
+contiene caracteres escapados, Java y PHP generan las mismas firmas. Se verificó
+con un vector sintético persistido en pruebas y también con el entorno real,
+comparando en memoria y mostrando únicamente igualdad. Laravel usaba LP `1.0`;
+se mantuvo `1.49` porque el rechazo no aporta evidencia para cambiar de versión.
+No se ejecutó Laravel ni se realizaron acciones en él.
+
+Se corrigió la clasificación que antes agrupaba todos los 403:
+- `Invalid Token`: `AUTENTICACION_RECHAZADA`.
+- `Timestamp out of range`: `RELOJ_DESAJUSTADO`.
+- Mensaje explícito de autorización insuficiente: `PERMISOS_INSUFICIENTES`.
+- 403 sin marcador reconocido: `ACCESO_DENEGADO`, sin afirmar la causa.
+
+El rechazo observado corresponde a autenticación, no acredita una falta de permisos
+sobre WhoAmI. Las firmas coincidentes no prueban que los pares estén vigentes,
+asociados a la misma aplicación o autorizados en ese entorno. El proveedor debe
+revisar esos puntos y, si corresponde, renovar el contexto de usuario mediante su
+procedimiento autorizado. No se reemplazaron claves ni se inició OAuth o un acceso
+interactivo. Referencia oficial: [diagnóstico de 403](https://docs.valence.desire2learn.com/basic/apicall.html#disposition-and-error-handling).
+
+Academusoft conserva `OK` en MySQL. La consulta que permite declararlo disponible
+es exclusivamente `SELECT 1 FROM DUAL` con autenticación y timeouts: no valida
+vistas académicas ni sincronizaciones. No se repitió Oracle durante esta revisión.
+
+## Comprobación de Academusoft y Brightspace
+
+Inicio consulta `GET /api/v1/integraciones` (`INTEGRACIONES_CONSULTAR`).
+«Comprobar ahora» utiliza `POST /api/v1/integraciones/{ACADEMUSOFT|BRIGHTSPACE}/comprobaciones`
+(`INTEGRACIONES_COMPROBAR`). Se conservan JWT, autorización actual por petición y
+CSRF en los flujos con cookies; el frontend envía también CSRF en sus escrituras.
+El GET solo lee MySQL: abrir Inicio, sondear o recargar no consulta plataformas externas.
+No hay comprobaciones periódicas ni sincronizaciones.
+
+Cada plataforma conserva en MySQL su último resultado, inicio/fin UTC, duración,
+código seguro y alcance. V6 agrega exclusivamente `estados_integraciones`.
+La auditoría administrativa registra la comprobación y el código sin respuestas externas.
+Los estados son sin configurar, sin comprobar, disponible y con problemas;
+la antigüedad se distingue como resultado desactualizado,
+sin afirmar que la plataforma esté caída. Un fallo al leer JanusSync produce un error
+propio de consulta y nunca una lista vacía ni una alternativa simulada.
+
+### Configuración local de conexiones
+
+Variables de `.env`, pasadas explícitamente por Compose; no escribir secretos en
+esta documentación ni en el frontend. `.env`, claves y secretos están excluidos
+de Git y del contexto de construcción. Tras completar la configuración:
+
+```bash
+docker compose up -d --no-build --no-deps --force-recreate backend
+```
+
+| Variable | Uso / valor predeterminado |
+| --- | --- |
+| `ACADEMUSOFT_MECANISMO` | `ORACLE`; selección técnica interna, sin selector en la interfaz |
+| `ACADEMUSOFT_ORACLE_URL` | Vacío; URL JDBC Thin, sin usuario ni contraseña incorporados |
+| `ACADEMUSOFT_ORACLE_USERNAME` / `ACADEMUSOFT_ORACLE_PASSWORD` | Vacías; cuenta autorizada de solo lectura |
+| `BRIGHTSPACE_BASE_URL` | Vacía; origen HTTPS, sin ruta, credenciales, query ni fragmento |
+| `BRIGHTSPACE_API_VERSION` | Vacía; versión LP habilitada por el proveedor |
+| `BRIGHTSPACE_APP_ID` / `BRIGHTSPACE_APP_KEY` | Vacías; aplicación Valence ID-Key autorizada |
+| `BRIGHTSPACE_USER_ID` / `BRIGHTSPACE_USER_KEY` | Vacías; contexto de usuario de esa aplicación |
+| `JANUS_CONNECTION_TIMEOUT` | `PT3S`, máximo para conectar |
+| `JANUS_CHECK_TIMEOUT` | `PT10S`, máximo del recorrido completo por plataforma; máximo configurable 60 s |
+| `JANUS_CHECK_COOLDOWN` | `PT1M`, intervalo mínimo entre solicitudes de una misma plataforma |
+| `JANUS_CHECK_STALE_MINUTES` | `15`, vigencia informativa del resultado |
+
+La reserva persistida permite ver la comprobación en curso sin retirar el resultado
+anterior. Un bloqueo MySQL `GET_LOCK` por plataforma evita ejecuciones simultáneas
+entre pestañas e instancias; se libera en `finally` y al perder la conexión del proceso.
+No se mantiene ninguna transacción MySQL abierta durante la llamada externa.
+El indicador en curso vence tras el timeout más 30 s si el proceso se interrumpe.
+El ejecutor externo está limitado a una tarea por plataforma, sin cola; las tareas
+canceladas no permiten acumular nuevas conexiones si un driver tarda en finalizar.
+
+### Qué comprueba cada plataforma
+
+**Academusoft:** conexión adicional Oracle, creada bajo demanda y separada del
+DataSource MySQL/Flyway. Ejecuta únicamente `SELECT 1 FROM DUAL`, con una fila,
+conexión marcada de solo lectura y límites de conexión, lectura y consulta.
+Verifica comunicación y autenticación, **no** permisos sobre las vistas académicas,
+estudiantes, docentes, programas ni funciones de sincronización. Una URL ausente
+no impide arrancar el backend ni administrar usuarios y roles.
+No se ha supuesto la versión de Oracle a partir del valor `11g` de ejemplo del Laravel:
+la compatibilidad del servidor efectivo debe verificarse cuando exista acceso.
+
+**Brightspace:** `GET /d2l/api/lp/{BRIGHTSPACE_API_VERSION}/users/whoami`,
+firmado mediante Valence ID-Key HMAC-SHA256, con claves de aplicación y usuario.
+Solo acepta HTTPS con certificados válidos y sin redirecciones; acota el cuerpo a
+16 KiB y valida JSON de identidad (`Identifier`, `FirstName`, `LastName`, `UniqueName`,
+`ProfileIdentifier`). Descarta el cuerpo sin persistir datos personales; no registra
+URI firmada, firmas, claves ni excepciones externas. Un HTTP 200 de HTML de acceso
+no es éxito. No renueva credenciales ni inicia autenticaciones interactivas.
+
+La revisión de solo lectura de `/Users/abi/workspace/UCMC/janussync` encontró el
+SDK PHP `brightspace/valence-sdk-php` (`^1.6`), claves ID-Key por entorno y la versión
+`1.0` fijada en el código de comprobación, además de otras versiones en operaciones
+ajenas a esta entrega. No hay `.env` ni configuración cacheada en esa copia; los
+valores de ejemplo y predeterminados no acreditan configuración efectiva y no se
+trasladaron como credenciales vigentes. ID-Key está deprecado y LP `1.0` es obsoleto
+según la documentación vigente: el administrador del proveedor debe confirmar una
+versión compatible y la vigencia de las claves. Migrar a OAuth requiere el contrato
+y autorización correspondientes; esta entrega no inventa una configuración OAuth.
+
+Referencias oficiales: [autenticación ID-Key](https://docs.valence.desire2learn.com/basic/legacyauth.html),
+[WhoAmI y versiones LP](https://docs.valence.desire2learn.com/res/user.html),
+[timeouts JDBC Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/26/jajdb/oracle/jdbc/OracleConnection.html)
+y [compatibilidad JDBC](https://www.oracle.com/database/technologies/faq-jdbc.html).
+
+### Resultado de las comprobaciones locales
+
+Después de revisar Laravel, se completó exclusivamente el `.env` local con la
+información adicional proporcionada por el usuario: Oracle de pruebas (solo esquema
+`ACADEMICO`) y un juego completo ID-Key rotulado en `GuiaBrightspace.txt`. No se usaron
+las demás cuentas Oracle ni se mezclaron claves de aplicaciones diferentes.
+El bloque de ejemplo de esa guía contenía un identificador mal formado; ahora los
+cuatro identificadores y claves ID-Key deben tener el formato de 22 caracteres
+admitido por Valence, antes de realizar una petición. La versión LP local es `1.49`;
+el proveedor debe confirmar su habilitación efectiva.
+
+Comprobaciones mínimas reales del 2026-10-23, con los mismos adaptadores Java:
+- Academusoft: `SIN_COMUNICACION`; además, el puerto de pruebas agotó el tiempo
+  de conexión desde el equipo. Revisar VPN/ruta/firewall autorizado; no se verificó
+  autenticación Oracle ni acceso a vistas.
+- Brightspace: `AUTENTICACION_RECHAZADA`, también con el juego ID-Key completo de
+  la guía. Revisar vigencia de los pares de claves, su asociación, habilitación de
+  la aplicación y permisos del proveedor. No se confirma acceso autenticado exitoso.
+
+Estas comprobaciones técnicas no crean usuarios, sesiones ni resultados simulados
+en la base de trabajo. En Inicio, «Comprobar ahora» guarda el resultado real bajo
+la identidad del administrador autenticado. Un arranque no ejecuta comprobaciones.
+
+### Verificación de esta entrega
+
+Con Java 21/Maven y Docker, desde backend:
+
+```bash
+./mvnw -Pmysql-it -Dtest=ConexionesExternasTest,ArquitecturaTest '-Dit.test=IntegracionesMySqlIT,PersistenciaMySqlIT#migracionesCarganCuatroRolesSinCredenciales' verify
+```
+
+El navegador se verifica con base efímera y administrador creado por la consola,
+sin credenciales externas ni cambios en los datos de trabajo:
+
+```bash
+docker build -t janussync-integraciones-backend .
+docker build -t janussync-integraciones-frontend ../frontend-janussync
+python3 scripts/verificar-integraciones.py
+```
+
+Las pruebas de adaptadores usan dobles aislados; no prueban acceso a los proveedores.
+Para prueba manual: ingresar en `http://localhost:3000`, abrir Inicio, comprobar cada
+plataforma, abrir Diagnóstico y recargar. La última comprobación debe conservarse.
+«Sin configurar» requiere completar el entorno; «Disponible» acredita solo el alcance
+indicado en el diagnóstico, nunca una sincronización completa.
+
+---
+
 # JanusSync — Backend
 
 ## Usuarios, contraseñas, correo y auditoría
