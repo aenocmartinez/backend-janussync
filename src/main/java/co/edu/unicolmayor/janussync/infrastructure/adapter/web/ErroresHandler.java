@@ -38,6 +38,11 @@ public class ErroresHandler {
         p.setProperty("code","CATALOG_UPDATE_FAILED");return p;
     }
 
+    @ExceptionHandler(InformacionAcademicaNoDisponibleException.class)
+    ProblemDetail informacionAcademica(InformacionAcademicaNoDisponibleException error){
+        var p=ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,error.getMessage());p.setProperty("code","ACADEMUSOFT_UNAVAILABLE");return p;
+    }
+
     @ExceptionHandler(AcademusoftNoDisponibleException.class)
     ProblemDetail academusoft(AcademusoftNoDisponibleException error) {
         var p=ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,error.getMessage());

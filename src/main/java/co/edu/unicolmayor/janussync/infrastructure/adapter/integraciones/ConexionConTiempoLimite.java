@@ -17,6 +17,7 @@ public final class ConexionConTiempoLimite implements ComprobarConexionPort, Aut
     public Plataforma plataforma() { return delegado.plataforma(); }
     public OrigenComprobacion origen() { return delegado.origen(); }
     public String alcance() { return delegado.alcance(); }
+    public boolean vigente(ComprobacionConexion c) { return delegado.vigente(c); }
     public boolean configurada() { return delegado.configurada(); }
     public ResultadoConexion comprobar() {
         Future<ResultadoConexion> tarea;

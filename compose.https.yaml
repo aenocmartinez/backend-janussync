@@ -1,0 +1,9 @@
+# Complemento local: docker compose -f compose.yaml -f compose.https.yaml up -d
+services:
+  backend:
+    environment:
+      JANUS_COOKIE_SECURE: "true"
+      JANUS_FRONTEND_PUBLIC_URL: https://janussync.test
+      # Ningún cliente (incluido el puerto de diagnóstico) puede decidir su origen
+      # mediante Forwarded/X-Forwarded-*. Las cookies usan configuración explícita.
+      SERVER_FORWARD_HEADERS_STRATEGY: NONE

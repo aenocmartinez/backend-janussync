@@ -11,6 +11,13 @@ import static org.mockito.Mockito.*;
 class BrightspaceModoTest {
     private ApplicationContextRunner contexto(String... perfiles) {
         return new ApplicationContextRunner().withUserConfiguration(IntegracionesConfiguration.class)
+            .withBean(co.edu.unicolmayor.janussync.application.usecase.AutorizarConexionUseCase.class, () -> {
+                var caso=mock(co.edu.unicolmayor.janussync.application.usecase.AutorizarConexionUseCase.class);
+                when(caso.plataforma()).thenReturn(Plataforma.BRIGHTSPACE);
+                when(caso.origen()).thenReturn(OrigenComprobacion.REAL);
+                when(caso.comprobar()).thenReturn(new ResultadoConexion(DiagnosticoConexion.SIN_CONFIGURAR));
+                return caso;
+            })
             .withBean(IntegracionesRepository.class, () -> mock(IntegracionesRepository.class))
             .withInitializer(c -> c.getEnvironment().setActiveProfiles(perfiles));
     }

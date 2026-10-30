@@ -1,3 +1,129 @@
+## Brightspace OAuth 2.0
+
+Implementación, variables, autorización interactiva, activación explícita y regreso
+al mock: [OAUTH-BRIGHTSPACE.md](OAUTH-BRIGHTSPACE.md). Tras el consentimiento
+del usuario se verificó whoami real con OAuth; el entorno usa modo real. Las instrucciones OAuth sustituyen las
+instrucciones Valence anteriores cuando se selecciona `BRIGHTSPACE_MODE=real`.
+
+## Desarrollo local con HTTPS
+
+Desde esta carpeta: `docker compose -f compose.yaml -f compose.https.yaml up --build -d`.
+El complemento impone cookies seguras y URL pública `https://janussync.test`.
+MySQL permanece externo y Brightspace conserva su modo actual.
+La guía compartida [HTTPS-LOCAL.md](../frontend-janussync/HTTPS-LOCAL.md) documenta
+certificados, hosts macOS, proxy Nitro/Vite, comprobaciones y reversión.
+`/callback` procesa ahora la autorización según la guía OAuth, con state de un solo uso.
+
+## Solicitudes de integración — primera entrega (V10)
+
+Una solicitud corresponde a **un programa y un período institucional**. El programa
+y período quedan fijados al crear el borrador; para otro ámbito se crea otra
+solicitud. No hay agrupación destino, semillas, archivos ni operaciones Brightspace.
+
+Permisos nuevos, administrables desde los roles existentes:
+
+| Permiso | Alcance | Concesión inicial V10 |
+| --- | --- | --- |
+| SOLICITUDES_PREPARAR | Crear/editar de programas asignados | Coordinador y Colaborador |
+| SOLICITUDES_ENVIAR | Enviar siendo responsable vigente del programa | Coordinador |
+| SOLICITUDES_ATENDER | Consultar enviadas y devolver desde Educación Virtual | Operador EV |
+
+Administrador **no** recibe estos permisos automáticamente. Los roles dinámicos
+se autorizan por sus permisos actuales, nunca por el nombre visible. La asignación
+de programas también admite roles dinámicos con preparación/envío. Listado,
+detalle, fuentes académicas, integrantes, escrituras y contador comprueban el
+alcance actual; se revalida bajo el bloqueo administrativo al guardar/transicionar.
+
+Fuentes acreditadas con metadatos, definiciones de vistas y SELECT acotados:
+
+- Laravel anterior leía V_BRIGHTSPACE_ESTRUCTURA/PERIODOS/DOCENTES/ESTUDIANTES;
+  su agrupación por texto de materia y cruce por tipo de período no identifican
+  grupos. No se ejecutó Laravel ni se reutilizaron esos supuestos.
+- Programa: catálogo local MySQL, ID institucional PROG_ID.
+- Período: PERIODOUNIVERSIDAD.PEUN_ID; relación con programa mediante
+  PERIODOPROGRAMAUNIDAD.UNPR_ID → UNIDADPROGRAMA.PROG_ID. Etiqueta con año,
+  período y TIPOPERIODOACADEMICO; TPPA_ID es un tipo, **no** la identidad del período.
+- Asignatura: MATERIA.MATE_CODIGOMATERIA/MATE_NOMBRE. Grupo: GRUPO.GRUP_ID,
+  GRUP_NOMBRE, PEUN_ID y MATE_CODIGOMATERIA; pertenencia al programa mediante
+  PENSUMMATERIAGRUPO → PENSUM.PROG_ID, conservando la relación de asignatura.
+  Solo GRUP_ACTIVO='1', documentado oficialmente como activo. Sede descriptiva:
+  GRUPO.UNID_IDREGIONAL → UNIDAD.UNID_NOMBRE, sin inventar etiquetas.
+- Docentes: DOCENTEGRUPO.GRUP_ID → DOCENTEUNIDAD.DOUN_ID → PEGE_ID.
+- Estudiantes: GRUPOMATRICULADO.GRUP_ID → MATRICULAACADEMICA.MAAC_ID →
+  ESTUDIANTEPENSUM.ESTP_ID. Solo GRMA_ESTADO='1' (comentario oficial: activo,
+  0 cancelado); se comprueba que la matrícula pertenece al período del grupo.
+- Nombres mínimos: GENERAL.PERSONANATURALGENERAL por PEGE_ID. No se leen ni
+  almacenan documentos, direcciones, teléfonos, correos académicos ni notas.
+
+El adaptador Java real acreditó 76 períodos y 19 grupos para el programa de la
+sonda en 2026-2, y las relaciones de un grupo con 1 docente y 0 estudiantes activos.
+Un cero confirmado no se confunde con un fallo: una relación incompleta o un
+error Oracle produce 503 y conserva el trabajo. No se impone un mínimo ficticio
+de estudiantes/docentes. Se exige al menos un grupo válido para enviar.
+Límites: conexión 5 s, consulta/red 10 s, 20 grupos por página, 50 grupos por
+solicitud, hasta 500 períodos y 5000 integrantes por categoría/grupo; al superar
+un límite se rechaza la lectura, sin publicar listas truncadas como completas.
+No se hacen copias periódicas de grupos o estudiantes ni escrituras Oracle.
+
+Estados exactos: BORRADOR → ENVIADA → CON_OBSERVACIONES → ENVIADA.
+Colaborador prepara/corrige; solo el coordinador responsable con permiso vigente
+puede enviar. Al crear un coordinador queda responsable; un colaborador elige
+un coordinador elegible del programa. El responsable no se reasigna al cambiar
+roles/programas; si pierde elegibilidad, un administrador debe restablecer el
+acceso requerido antes de enviar. EV nunca ve borradores. Una enviada no se edita
+hasta la devolución. Observación obligatoria: al menos tres palabras y 15
+caracteres, hasta 4000; nota de preparación hasta 4000.
+
+V10 persiste solicitud, versión, comandos idempotentes, seguimiento/revisiones y
+resultados de avisos. El contenido se valida en Oracle **antes** de la transacción
+MySQL; dentro se comprueban otra vez versión, permisos, ámbito y responsable.
+Estado, contenido, auditoría y preparación de avisos confirman juntos. Las
+revisiones de envío conservan integrantes mínimos, origen ACADEMUSOFT e instante
+UTC de consulta. Referencia actual y contenido registrado se consultan por rutas
+separadas; leer Oracle nunca cambia una revisión enviada.
+
+La API se concentra en `/api/v1/solicitudes`: GET lista paginada (20), detalle,
+`pendientes`, `academicos/*`, responsables y revisiones; POST crea, `/{id}/envio`
+y `/{id}/devolucion`; PUT `/{id}` edita. Las escrituras exigen JWT y CSRF mediante
+el filtro estándar de Spring. Cada comando incluye UUID `operacion` estable
+para repetir el mismo intento y versión esperada en ediciones/transiciones.
+Una repetición no modifica estado ni envía otro correo; una clave con distinto
+contenido se rechaza. Un conflicto conserva el formulario.
+
+Dos mecanismos de comunicación: correo con enlace autenticado y contador del
+menú Solicitudes. El contador hace COUNT en MySQL, independiente de paginación:
+ENVIADAS para quien atiende, CON_OBSERVACIONES de programas asignados para quien
+prepara/envía, con unión sin duplicados. Abrir el detalle no lo consume. Cero se
+oculta; fallo se presenta como dato no disponible. Se refresca al entrar,
+recuperar el foco y confirmar acciones; no hay campana, centro de mensajes,
+WebSockets ni tarea programada de avisos.
+
+Correo reutiliza CorreoPort y el SMTP Sandbox de Mailtrap ya configurado por
+variables. Envío/reenvío: operadores activos con SOLICITUDES_ATENDER. Devolución:
+responsable y creador colaborador si conservan acceso, deduplicados. Sin aviso
+por crear/editar. Contiene número, programa, acción y enlace público, sin listas
+personales ni tokens. Los destinatarios se revalidan antes del intento, que se
+realiza fuera de transacciones MySQL. Se distingue ACEPTADO_SMTP (no entrega),
+FALLIDO, INCIERTO, SIN_DESTINATARIOS y OMISIÓN por pérdida de acceso. Si el proceso
+se interrumpe durante el envío, queda incierto y no se reintenta automáticamente.
+Un fallo SMTP no revierte la solicitud. No se cambia Mailtrap a envío real.
+
+Prueba manual en http://localhost:3000: asignar rol/capacidades y programas reales
+mediante la administración existente; ingresar como colaborador/coordinador →
+Solicitudes → Nueva solicitud → programa/período → buscar grupos → consultar
+integrantes → Guardar borrador. Responsable revisa y envía. Operador entra por
+Solicitudes o por el enlace de correo y devuelve observaciones. Colaborador
+corrige; responsable reenvía. Revisar contador y seguimiento en cada perfil.
+El enlace exige autenticación y autorización actuales y no concede acceso.
+
+Prueba aislada reproducible: `python3 scripts/verificar-solicitudes.py` con las
+imágenes `janussync-solicitudes-backend/frontend` y el JAR compilado. Crea MySQL
+8.4 temporal, identidades de prueba aisladas y SMTP Mailpit con certificado de
+prueba, STARTTLS obligatorio y autenticación ([configuración oficial](https://mailpit.axllent.org/docs/configuration/smtp/)).
+Solo ese JVM temporal confía en el certificado temporal; la configuración de
+trabajo y Mailtrap no se sustituyen. Oracle se consulta exclusivamente en lectura.
+Todo contenedor, clave y buzón temporal se elimina al finalizar.
+
 ## Catálogo local de programas — 2026-10-24 (V9)
 
 Esta entrega sustituye las búsquedas y validaciones Oracle bajo demanda descritas

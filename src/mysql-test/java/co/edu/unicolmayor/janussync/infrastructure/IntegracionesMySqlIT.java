@@ -79,6 +79,8 @@ class IntegracionesMySqlIT {
     co.edu.unicolmayor.janussync.infrastructure.adapter.integraciones.ConexionConTiempoLimite brightspace;
     static final String CORREO="integraciones@pruebas.invalid", CONTRASENA="ContrasenaSoloPrueba2026";
     @BeforeEach void preparar() {
+        // Este spy acredita el contrato de resultados; OAuth se prueba por separado.
+        org.mockito.Mockito.doReturn(true).when(brightspace).vigente(org.mockito.ArgumentMatchers.any());
         jdbc.update("DELETE FROM auditoria_administrativa");
         jdbc.update("DELETE FROM tokens_renovacion");jdbc.update("DELETE FROM sesiones_autenticacion");
         jdbc.update("DELETE FROM credenciales");jdbc.update("DELETE FROM usuarios_roles");jdbc.update("DELETE FROM usuarios");

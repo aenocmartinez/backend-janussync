@@ -5,6 +5,12 @@ import org.springframework.web.util.HtmlUtils;
 final class PlantillasCorreo {
  record Contenido(String asunto,String texto,String html) { @Override public String toString(){return "Contenido[protegido]";} }
  static Contenido acceso(String nombre,String proposito,String enlace,Instant vence){
+ if(proposito.startsWith("SOLICITUD_")) {
+  String cambio=proposito.equals("SOLICITUD_DEVOLVER")?"Devuelta con observaciones para corregir y reenviar":"Enviada a Educación Virtual para revisión";
+  String texto=nombre+"\n"+cambio+".\nVer solicitud: "+enlace+"\nRequiere iniciar sesión y conservar acceso. La aceptación SMTP no confirma entrega.";
+  String html="<!doctype html><html lang=\"es\"><body><h1>JanusSync</h1><p>"+HtmlUtils.htmlEscape(nombre)+"</p><p>"+cambio+".</p><p><a href=\""+HtmlUtils.htmlEscape(enlace)+"\">Ver solicitud</a></p><p>Requiere iniciar sesión y conservar acceso.</p></body></html>";
+  return new Contenido("JanusSync · "+nombre,texto,html);
+ }
  if(proposito.equals("PRUEBA"))return new Contenido("JanusSync · prueba SMTP Sandbox","Este mensaje verifica la aceptación SMTP en Mailtrap Sandbox. No contiene credenciales ni enlaces de contraseña.","<!doctype html><html lang=\"es\"><body><h1>JanusSync</h1><p>Prueba SMTP Sandbox. No contiene credenciales ni enlaces de contraseña.</p></body></html>");
  String accion=proposito.equals("INVITACION")?"Establecer contraseña":"Restablecer contraseña";
  String vencimiento=DateTimeFormatter.ofPattern("dd/MM/uuuu HH:mm").withZone(ZoneId.of("America/Bogota")).format(vence)+" (Bogotá)";

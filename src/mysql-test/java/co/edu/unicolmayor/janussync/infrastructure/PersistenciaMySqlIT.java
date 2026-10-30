@@ -65,7 +65,7 @@ class PersistenciaMySqlIT {
                 .permisos())
                 .hasSize(16);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM flyway_schema_history WHERE success=1", Integer.class))
-                .isEqualTo(9);
+                .isEqualTo(11);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM bloqueo_administracion WHERE id=1", Integer.class))
                 .isEqualTo(1);
     }

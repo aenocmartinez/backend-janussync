@@ -20,7 +20,10 @@ public class ComprobarIntegracionesUseCase {
         return Arrays.stream(Plataforma.values()).map(this::consultar).toList();
     }
     private EstadoIntegracion consultar(Plataforma p) {
-        return repositorio.consultar(p, conexiones.get(p).origen(), conexiones.get(p).configurada(), tiempos.desactualizadaTrasMinutos());
+        var estado=repositorio.consultar(p, conexiones.get(p).origen(), conexiones.get(p).configurada(), tiempos.desactualizadaTrasMinutos());
+        if (estado.ultima()!=null && !conexiones.get(p).vigente(estado.ultima()))
+            return new EstadoIntegracion(p,estado.configurada(),null,estado.comprobandoDesde(),null,estado.desactualizadaTrasMinutos(),estado.origen());
+        return estado;
     }
     public EstadoIntegracion comprobar(Plataforma p, String actor) {
         try (var reserva = repositorio.reservar(p, conexiones.get(p).origen(), tiempos.pausa(), tiempos.ejecucion())) {

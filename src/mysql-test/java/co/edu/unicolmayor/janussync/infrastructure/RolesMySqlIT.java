@@ -95,7 +95,7 @@ class RolesMySqlIT {
                 "INSERT INTO roles_permisos VALUES('COORDINADOR','PERFIL_CONSULTAR'),('COLABORADOR','PERFIL_CONSULTAR'),('OPERADOR_EV','PERFIL_CONSULTAR')");
         jdbc.update("DELETE FROM roles WHERE inicial=FALSE");
         jdbc.update("UPDATE roles SET estado='ACTIVO'");
-        jdbc.update("INSERT IGNORE INTO roles_permisos SELECT 'ADMINISTRADOR',codigo FROM permisos");
+        jdbc.update("INSERT IGNORE INTO roles_permisos SELECT 'ADMINISTRADOR',codigo FROM permisos WHERE modulo<>'SOLICITUDES'");
         inicializar.ejecutar(new AdministradorInicial(new NombrePersona("Persona"), new NombrePersona("Prueba"),
                 new CorreoElectronico(CORREO)), CONTRASENA);
         jdbc.update("INSERT INTO usuarios_roles SELECT id,'COORDINADOR' FROM usuarios");

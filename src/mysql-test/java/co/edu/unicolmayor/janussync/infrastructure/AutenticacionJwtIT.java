@@ -341,8 +341,9 @@ class AutenticacionJwtIT {
                 .getTokenValue();
         consultar(incompleto, 401);
         mvc.perform(get("/api/v1/roles")).andExpect(status().isUnauthorized());
-        mvc.perform(protegido(post("/api/v1/usuarios")).header("Authorization", "Bearer " + tokens.jwt()))
-                .andExpect(status().isForbidden());
+        // Un JWT incompleto tampoco autoriza escrituras aun con CSRF válido.
+        mvc.perform(protegido(post("/api/v1/usuarios")).header("Authorization", "Bearer " + incompleto))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -363,4 +364,28 @@ class AutenticacionJwtIT {
         refresh(tokens.refresh(), 401);
     }
 
+
+    @Test
+    void oauthInicioExigeJwtPermisoYCsrFAunConBearer() throws Exception {
+        mvc.perform(post("/api/v1/integraciones/BRIGHTSPACE/autorizacion")).andExpect(status().isForbidden());
+        var token=login().jwt();
+        mvc.perform(post("/api/v1/integraciones/BRIGHTSPACE/autorizacion").header("Authorization","Bearer "+token))
+            .andExpect(status().isForbidden());
+        mvc.perform(protegido(post("/api/v1/integraciones/BRIGHTSPACE/autorizacion")).header("Authorization","Bearer "+token))
+            .andExpect(status().isConflict());
+        jdbc.update("DELETE FROM roles_permisos WHERE permiso_codigo='INTEGRACIONES_COMPROBAR'");
+        mvc.perform(protegido(post("/api/v1/integraciones/BRIGHTSPACE/autorizacion")).header("Authorization","Bearer "+token))
+            .andExpect(status().isForbidden());
+    }
+    @Test
+    void callbackSinCookieJwtSiempreRedirigeLimpioYNoDeclaraExito() throws Exception {
+        mvc.perform(get("/callback").param("code","codigo-no-publicable").param("state","invalido")
+            .header("X-Forwarded-Host","malicioso.invalid"))
+            .andExpect(status().isSeeOther())
+            .andExpect(header().string("Location","/inicio?plataforma=brightspace"))
+            .andExpect(header().string("Referrer-Policy","no-referrer"))
+            .andExpect(header().string("Cache-Control","no-store"))
+            .andExpect(content().string(""));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM oauth_conexion",Integer.class)).isZero();
+    }
 }

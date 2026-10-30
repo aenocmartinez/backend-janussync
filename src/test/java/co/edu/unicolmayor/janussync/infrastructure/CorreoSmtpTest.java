@@ -19,4 +19,11 @@ class CorreoSmtpTest {
   var contenido=new java.io.ByteArrayOutputStream();mensaje.writeTo(contenido);String mime=contenido.toString(java.nio.charset.StandardCharsets.UTF_8);assertThat(mime).contains("multipart/alternative","text/plain","text/html").doesNotContain("spring.mail.password");
  }
  @Test void noAfirmaEntregaAnteTimeout(){var mail=mock(JavaMailSender.class);when(mail.createMimeMessage()).thenReturn(new MimeMessage(Session.getInstance(new Properties())));doThrow(new org.springframework.mail.MailSendException("Fallo",new java.net.SocketTimeoutException())).when(mail).send(any(MimeMessage.class));assertThat(new CorreoSmtpAdapter(mail,ambiente()).enviar("destino@pruebas.invalid","Persona","INVITACION","https://janus.example/enlace",Instant.now())).isEqualTo(CorreoPort.Resultado.INCIERTO);}
+ @Test void avisoSolicitudContieneEnlaceYNoContenidoAcademicoPersonal()throws Exception {
+  var mail=mock(JavaMailSender.class);var mensaje=new MimeMessage(Session.getInstance(new Properties()));when(mail.createMimeMessage()).thenReturn(mensaje);
+  var adaptador=new CorreoSmtpAdapter(mail,ambiente());assertThat(adaptador.avisarSolicitud("operador@pruebas.invalid",42,"Programa <oficial>","ENVIAR","https://janus.example/solicitudes/referencia")).isEqualTo(CorreoPort.Resultado.ENVIADO);
+  var salida=new java.io.ByteArrayOutputStream();mensaje.writeTo(salida);String mime=salida.toString(java.nio.charset.StandardCharsets.UTF_8);
+  assertThat(mime).contains("multipart/alternative","text/plain","text/html").doesNotContain("establecer-contrasena","restablecer-contrasena","token=","Documento de identidad");verify(mail).send(mensaje);
+ }
+
 }

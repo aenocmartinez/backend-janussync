@@ -1,6 +1,7 @@
 package co.edu.unicolmayor.janussync.infrastructure.config;
 
 import co.edu.unicolmayor.janussync.application.usecase.ComprobarIntegracionesUseCase;
+import co.edu.unicolmayor.janussync.application.usecase.AutorizarConexionUseCase;
 import co.edu.unicolmayor.janussync.domain.port.*;
 import co.edu.unicolmayor.janussync.domain.valueobject.TiemposConexion;
 import co.edu.unicolmayor.janussync.infrastructure.adapter.integraciones.*;
@@ -21,7 +22,7 @@ public class IntegracionesConfiguration {
             e.getProperty("ACADEMUSOFT_ORACLE_URL",""),e.getProperty("ACADEMUSOFT_ORACLE_USERNAME",""),
             e.getProperty("ACADEMUSOFT_ORACLE_PASSWORD",""),t),t.ejecucion());
     }
-    @Bean(destroyMethod="close") ConexionConTiempoLimite conexionBrightspace(Environment e,TiemposConexion t) {
+    @Bean(destroyMethod="close") ConexionConTiempoLimite conexionBrightspace(Environment e,TiemposConexion t,AutorizarConexionUseCase oauth) {
         String modo = e.getProperty("BRIGHTSPACE_MODE","real");
         if (!modo.equals("real") && !modo.equals("mock"))
             throw new IllegalArgumentException("BRIGHTSPACE_MODE debe ser real o mock.");
@@ -31,12 +32,9 @@ public class IntegracionesConfiguration {
                 throw new IllegalArgumentException("Brightspace mock solo está permitido en el entorno local.");
             return new ConexionConTiempoLimite(new BrightspaceSimuladoAdapter(),t.ejecucion());
         }
-        return new ConexionConTiempoLimite(new BrightspaceHttpAdapter(e.getProperty("BRIGHTSPACE_BASE_URL",""),
-            e.getProperty("BRIGHTSPACE_API_VERSION",""),e.getProperty("BRIGHTSPACE_APP_ID",""),
-            e.getProperty("BRIGHTSPACE_APP_KEY",""),e.getProperty("BRIGHTSPACE_USER_ID",""),
-            e.getProperty("BRIGHTSPACE_USER_KEY",""),t,Clock.systemUTC()),t.ejecucion());
+        return new ConexionConTiempoLimite(oauth,t.ejecucion());
     }
-    @Bean ComprobarIntegracionesUseCase comprobarIntegraciones(IntegracionesRepository r,List<ComprobarConexionPort> conexiones,TiemposConexion t) {
-        return new ComprobarIntegracionesUseCase(r,conexiones,t,Clock.systemUTC());
+    @Bean ComprobarIntegracionesUseCase comprobarIntegraciones(IntegracionesRepository r,List<ConexionConTiempoLimite> conexiones,TiemposConexion t) {
+        return new ComprobarIntegracionesUseCase(r,new java.util.ArrayList<ComprobarConexionPort>(conexiones),t,Clock.systemUTC());
     }
 }

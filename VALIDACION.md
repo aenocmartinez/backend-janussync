@@ -1,3 +1,150 @@
+## 2026-10-30 — Validación real tras consentimiento del usuario
+
+Autorización institucional encontrada en AUTORIZADA con access token vigente.
+La primera lectura de vencimiento mezclaba la sesión MySQL local con UTC;
+al fijar time_zone=+00:00 se confirmó la vigencia.
+Se ejecutó AutorizarConexionUseCase.comprobar desde un contenedor temporal,
+utilizando el JAR y la configuración del backend, las claves externas y la misma
+coordinación MySQL del producto. No se reimplementó el intercambio ni se mostró
+ningún token, cuerpo de identidad o secreto. Se desactivaron tareas académicas
+y correo en ese verificador temporal.
+
+Resultado real: consulta autenticada whoami OK. No se forzó ni se acredita
+una renovación real en esta prueba. No se escribieron
+usuarios, cursos, matrículas ni otros recursos académicos. Se eliminaron los
+archivos temporales y el contenedor al terminar. Se activó BRIGHTSPACE_MODE=real,
+se eliminaron sus definiciones duplicadas en .env y se recreó únicamente backend.
+Esta evidencia sustituye el estado pendiente de las entradas anteriores.
+La comprobación operativa no se atribuyó a un usuario ni se guardó como una acción
+manual del monitor: pulsar Comprobar ahora para actualizar su tarjeta y auditoría.
+
+## 2026-10-30 — Brightspace OAuth 2.0
+
+Implementado Authorization Code institucional con callback real, state aleatorio
+256 bits, caducidad de 5 minutos, consumo único y correlación por cookie temporal
+Secure/HttpOnly/Lax de ruta /callback. JWT/CSRF/refresh de usuarios conservan Strict.
+Inicio exige INTEGRACIONES_COMPROBAR, JWT y CSRF aun con Bearer; se revalidan sesión
+y permiso iniciadores antes del intercambio y de activar credenciales.
+
+HTTP del proveedor aislado en infraestructura: endpoints confirmados en documentación
+oficial, intercambio Basic y Bearer para whoami, límites de tiempo/cuerpo, TLS normal,
+sin firmas Valence. Identidad comprobada antes de persistir. Tokens AES-256-GCM,
+clave externa creada con 600 en JANUS_KEYS_DIR, sin imprimirla. En .env se añadió
+solo la ruta interna de esa clave. Client ID/Secret OAuth siguen sin configurar;
+no se importaron credenciales de la guía histórica compartida por el usuario.
+
+V11 aditiva validada con MySQL efímero y aplicada por Flyway al iniciar backend.
+La configuración de MySQL externo no cambia. Renovación coordinada entre instancias
+con GET_LOCK, marca durable antes de enviar refresh y ausencia de reintento ante
+resultado ambiguo; se preserva refresh omitido y se reemplaza el devuelto.
+Resultados OK previos a una nueva autorización ya no acreditan su conectividad.
+El diagnóstico existente incorpora autorización y resultado del último intento;
+no se crea otro menú. Mock permanece explícito y activo, sin fallback.
+
+Verificación automática:
+
+- Compilaciones Docker backend (mvn verify, Java 21) y frontend Nitro aprobadas.
+- 23 pruebas seleccionadas de aplicación, HTTP OAuth, callback, cifrado, modos y
+  arquitectura aprobadas (11+4+2+1+3+2); la construcción también verifica el resto
+  de pruebas unitarias exigidas por el Dockerfile.
+- MySQL aislado: AutorizacionExternaMySqlIT 3/3 (cifrado persistido, consumo concurrente,
+  bloqueo interinstancia y marca durable); AutenticacionJwtIT 17/17;
+  PersistenciaMySqlIT#migracionesCarganCuatroRolesSinCredenciales 1/1;
+  IntegracionesMySqlIT 7/7. Sin usar MySQL externo ni credenciales reales en pruebas.
+- Se corrigió una expectativa previa de exigeClaimsDeVigenciaYSesion: enviaba JWT/CSRF
+  válidos a un POST sin cuerpo y esperaba 403. Ahora comprueba el JWT incompleto
+  que describe el caso y exige 401; no se modificó la autorización de usuarios.
+- Frontend: TypeScript aprobado; http-auth 10/10, server-proxy 1/1,
+  http-integrations 8/8 y brightspace-authorization 4/4. ESLint de los componentes
+  nuevos y sus pruebas aprobado. No se repitieron suites de otras funcionalidades.
+- Entorno local por HTTPS: Acceso solicitado dos veces, API sin JWT 401, cookie
+  CSRF Secure/HttpOnly/Strict, refresh sin CSRF 403/sin sesión 401 y callback
+  inválido con 303 a la ruta fija limpia. Nginx -t aprobado; logs de errores
+  de upstream de /callback desactivados para no almacenar códigos/state.
+
+**No hubo consentimiento ni comprobación contra Brightspace real.** Quedan para el
+usuario las variables OAuth actuales, su consentimiento interactivo, el cambio
+explícito a real y Comprobar ahora. No se automatizó ninguna contraseña del proveedor.
+Estado final: modo mock conservado, frontend/backend/Nginx iniciados; sin commits,
+push ni merge. [Procedimiento OAuth](OAUTH-BRIGHTSPACE.md).
+
+## 2026-10-30 — HTTPS local
+
+Complemento `compose.https.yaml`: cookies seguras, URL pública HTTPS y encabezados
+reenviados ignorados explícitamente. `.env`, MySQL externo y Brightspace conservados.
+Backend reconstruido con `mvn -B -q verify` aprobado (Java 21 en Docker).
+Se validaron API/CSRF/callback por Nginx con la CA explícita y, por separado,
+login, JWT, rotación refresh, CSRF, logout y revocación en un recorrido HTTPS
+con MySQL efímero aislado. El MySQL de ejecución permanece fuera de Docker.
+No se implementó ni abrió un endpoint OAuth.
+
+Evidencia completa: [validación del frontend](../frontend-janussync/VALIDACION.md).
+La confianza macOS, hosts y recorrido con la cuenta del usuario quedan pendientes;
+comandos exactos de preparación, arranque y reversión en
+[HTTPS-LOCAL.md](../frontend-janussync/HTTPS-LOCAL.md).
+
+## 2026-10-24 — Solicitudes de integración, primera entrega
+
+Fuentes acreditadas mediante lecturas Oracle de solo lectura, sin imprimir
+personas ni secretos: metadatos y definiciones de las cuatro vistas Brightspace
+usadas por Laravel; tablas GRUPO/PENSUMMATERIAGRUPO/PENSUM, períodos por unidad y
+programa, DOCENTEGRUPO/DOCENTEUNIDAD, GRUPOMATRICULADO/MATRICULAACADEMICA/
+ESTUDIANTEPENSUM y GENERAL.PERSONANATURALGENERAL. Se verificó que ESTP_ID es el
+identificador institucional del estudiante de la vista; GRUP_ID identifica el
+grupo, PEUN_ID el período, y el código de materia no sustituye al grupo.
+Comentarios oficiales: GRUP_ACTIVO y GRMA_ESTADO, 1 activo / 0 inactivo o cancelado.
+El adaptador Java real devolvió 76 períodos, 19 grupos para 2026-2 del programa de
+la sonda y confirmó un grupo con 1 docente y 0 estudiantes activos. No se inventó
+un mínimo de integrantes ni se convirtió un fallo en cero. Los nombres académicos
+se conservan originales en las revisiones; solo se formatean al presentar.
+
+**15 pruebas backend aprobadas**: ArquitecturaTest (2), CorreoSmtpTest (4) y
+SolicitudesMySqlIT (9), con MySQL 8.4 temporal y dobles explícitos de Academusoft/
+correo para escenarios de fallo. Se comprueban creación y edición idempotentes,
+BORRADOR/ENVIADA/CON_OBSERVACIONES, envío/devolución/reenvío, responsable elegible,
+colaborador sin envío, EV sin borradores, ámbito de otro programa, inactivaciones,
+roles combinados y dinámicos, permisos retirados con JWT ya emitido, CSRF ausente,
+cabecera/cookie real y autorización de endpoints, manipulación de grupos, fallo
+Oracle sin pérdida, historial enviado inmutable, rollback de auditoría, ediciones
+y envíos concurrentes, SMTP fallido sin rollback, destinatarios inactivos o
+inexistentes, deduplicación y ausencia de transacción MySQL durante SMTP/Oracle.
+El contador se acredita con 21 solicitudes y páginas de 20; lectura del detalle
+no lo consume y la búsqueda ignora mayúsculas usando la comparación MySQL.
+
+**6 pruebas frontend**, TypeScript y compilación Docker aprobados: contrato HTTP,
+versión/operación estable, roles dinámicos para alcance académico, cero oculto,
+fallo del contador indicado sin cero ficticio, apertura de detalle sin consumo,
+formulario conservado al fallar y explicación de programas no disponibles.
+El build npm del host carecía de su binario nativo lightningcss; la compilación
+reproducible de Docker usa bun.lock sin cambios de dependencias y sí completó.
+
+**Chrome aprobado**, JWT real, MySQL y SMTP temporales, Oracle real solo lectura:
+Administrador sin acceso académico automático; Colaborador prepara un programa/
+período con grupo real, consulta integrantes y guarda; EV no ve el borrador;
+Coordinador revisa y envía; EV devuelve con comentario; Colaborador corrige;
+Coordinador reenvía. Los contadores se verifican en escritorio y menú móvil
+abierto, no se consumen por lectura y cambian con cada transición. Se capturaron
+cuatro avisos exactos por SMTP temporal con autenticación y STARTTLS, certificado
+confiado únicamente por ese JVM temporal; enlaces al detalle, sin contenido de
+notas/estudiantes ni tokens. No se contactó Mailtrap para estos datos de prueba.
+Todos los contenedores, claves y mensajes temporales se eliminaron.
+
+No hay campana, centro de notificaciones, archivos, seeds, agrupaciones destino,
+estados de ejecución/cierre, escrituras Oracle ni llamadas nuevas a Brightspace.
+Correo por evento solamente, sin cron ni reintentos automáticos. Los límites y
+la recuperación de responsables sin elegibilidad están documentados en README.
+
+Despliegue local verificado: JanusSync 0.1.0-SNAPSHOT con Flyway V10 aplicada.
+Imágenes backend cf30201e3faa y frontend cb88e7de4506; ambos healthy. Se recrearon
+solo esos dos servicios; las variables efectivas anteriores y los IDs de
+contenedores ajenos coinciden. Huellas idénticas de usuarios, roles, asignaciones,
+credenciales, permisos anteriores, catálogo y estado de su actualización.
+Solicitudes y avisos en la base de trabajo: 0; permisos SOLICITUDES_* otorgados
+automáticamente al rol ADMINISTRADOR: 0. Brightspace sigue mock y SMTP conserva
+su configuración anterior de Sandbox. Salud UP; proxy /auth/csrf 200 y endpoints
+de solicitudes/contador/programas sin JWT 401. Ambos repositorios continúan en
+main; sin commits, push ni merge realizados en esta entrega.
+
 ## 2026-10-24 — Catálogo MySQL de programas (V9)
 
 Carga inicial **real**, mediante el comando de consola y la configuración efectiva
@@ -755,3 +902,30 @@ imágenes base puedan descargarse para la arquitectura del equipo.
 El frontend todavía no está conectado a esta API. No hay autenticación del
 producto, CRUD completo, correo ni conexiones con los sistemas académicos.
 No se creó ni se publicó ningún repositorio de GitHub desde este entorno.
+
+
+### Solicitud #1: diagnóstico de estudiantes y cantidades (2026-10-24)
+
+Lecturas reales y acotadas, sin cambios en Oracle ni datos de trabajo:
+- Programa 1448, período PEUN_ID 1771 (2026-2), grupo 116792:
+  ADMINISTRACIÓN DE LA EDIFICACIÓN I, GRUPO A.
+- GRUPOMATRICULADO no contiene relaciones para ese grupo, aun sin filtrar
+  estados. El adaptador Java y GET de integrantes mediante el proxy responden
+  correctamente con 1 docente y 0 estudiantes (HTTP 200).
+- Los 32 grupos activos de ese programa/período carecen de relaciones de matrícula.
+  En todos los períodos del único programa asignado a la cuenta responsable,
+  los 557 grupos activos carecen de ellas. No se encontró un grupo elegible con
+  estudiantes dentro de ese alcance. Los escasos registros de grupos inactivos
+  tampoco completan la relación hasta ESTUDIANTEPENSUM. No se infirió un nuevo
+  significado para GRMA_ESTADO ni se cambiaron los filtros de estado/programa/período.
+- Corrección de contrato: cantidades null cuando los integrantes no se consultaron,
+  cero únicamente después de una lectura completa vacía. Indicador nullable
+  integrantesConsultados en el contenido; compatibilidad con JSON previo sin
+  reescribir revisiones existentes ni migraciones. Revisiones previas sin indicador
+  y vacías se tratan como cantidades desconocidas; sus listas permanecen intactas.
+- Pruebas específicas: GruposSolicitudPresentacionTest, 3 casos aprobados
+  (desconocido, vacío confirmado, lectura de revisiones anteriores).
+- Tras desplegar, GET de catálogo devuelve total=32 y cantidades null para
+  grupos no consultados; GET de integrantes conserva HTTP 200, 1 docente y
+  0 estudiantes. Frontend y backend saludables; huellas de datos de trabajo,
+  solicitudes y revisiones sin cambios. Sin escrituras Oracle ni envíos de correo.
